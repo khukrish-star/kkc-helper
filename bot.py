@@ -90,8 +90,8 @@ async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
     for user in users:
         try:
             await context.bot.send_message(chat_id=user, text=message)
-        except:
-            pass
+        except Exception as e:
+            print(e)
 
     await update.message.reply_text("Text broadcast sent")
 
@@ -135,8 +135,8 @@ async def media_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         for user in users:
             try:
                 await context.bot.send_photo(chat_id=user, photo=photo)
-            except:
-                pass
+            except Exception as e:
+                print(e)
 
         broadcast_mode.pop(update.effective_user.id, None)
         await update.message.reply_text("Photo broadcast sent")
@@ -147,23 +147,36 @@ async def media_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         for user in users:
             try:
                 await context.bot.send_document(chat_id=user, document=document)
-            except:
-                pass
+            except Exception as e:
+                print(e)
 
         broadcast_mode.pop(update.effective_user.id, None)
         await update.message.reply_text("File broadcast sent")
 
-    elif mode == "video" and update.message.video:
-        video = update.message.video.file_id
+    elif mode == "video":
+        file_id = None
 
-        for user in users:
-            try:
-                await context.bot.send_video(chat_id=user, video=video)
-            except:
-                pass
+        if update.message.video:
+            file_id = update.message.video.file_id
+        elif update.message.animation:
+            file_id = update.message.animation.file_id
+        elif update.message.document:
+            file_id = update.message.document.file_id
 
-        broadcast_mode.pop(update.effective_user.id, None)
-        await update.message.reply_text("Video broadcast sent")
+        if file_id:
+            for user in users:
+                try:
+                    if update.message.video:
+                        await context.bot.send_video(chat_id=user, video=file_id)
+                    elif update.message.animation:
+                        await context.bot.send_animation(chat_id=user, animation=file_id)
+                    else:
+                        await context.bot.send_document(chat_id=user, document=file_id)
+                except Exception as e:
+                    print(e)
+
+            broadcast_mode.pop(update.effective_user.id, None)
+            await update.message.reply_text("Video broadcast sent")
 
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -193,7 +206,7 @@ app.add_handler(CommandHandler("broadcastvideo", broadcast_video))
 
 app.add_handler(
     MessageHandler(
-        filters.PHOTO | filters.Document.ALL | filters.VIDEO,
+        filters.PHOTO | filters.Document.ALL | filters.VIDEO | filters.ANIMATION,
         media_handler
     )
 )
