@@ -59,7 +59,8 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/stats - Total users (admin only)\n"
         "/broadcast - Send text to all users\n"
         "/broadcastphoto - Send photo to all users\n"
-        "/broadcastfile - Send file to all users"
+        "/broadcastfile - Send file to all users\n"
+        "/broadcastvideo - Send video to all users"
     )
 
 
@@ -113,6 +114,15 @@ async def broadcast_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Now send the file")
 
 
+async def broadcast_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id != ADMIN_ID:
+        await update.message.reply_text("Not authorized")
+        return
+
+    broadcast_mode[update.effective_user.id] = "video"
+    await update.message.reply_text("Now send the video")
+
+
 async def media_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_ID:
         return
@@ -143,6 +153,18 @@ async def media_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         broadcast_mode.pop(update.effective_user.id, None)
         await update.message.reply_text("File broadcast sent")
 
+    elif mode == "video" and update.message.video:
+        video = update.message.video.file_id
+
+        for user in users:
+            try:
+                await context.bot.send_video(chat_id=user, video=video)
+            except:
+                pass
+
+        broadcast_mode.pop(update.effective_user.id, None)
+        await update.message.reply_text("Video broadcast sent")
+
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -155,7 +177,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text(f"Your Telegram ID: {query.from_user.id}")
 
     elif query.data == "about":
-        await query.edit_message_text("KKC Helper Bot v2 🚀")
+        await query.edit_message_text("KKC Helper Bot v3 🚀")
 
 
 app = Application.builder().token(BOT_TOKEN).build()
@@ -167,7 +189,15 @@ app.add_handler(CommandHandler("stats", stats))
 app.add_handler(CommandHandler("broadcast", broadcast))
 app.add_handler(CommandHandler("broadcastphoto", broadcast_photo))
 app.add_handler(CommandHandler("broadcastfile", broadcast_file))
-app.add_handler(MessageHandler(filters.PHOTO | filters.Document.ALL, media_handler))
+app.add_handler(CommandHandler("broadcastvideo", broadcast_video))
+
+app.add_handler(
+    MessageHandler(
+        filters.PHOTO | filters.Document.ALL | filters.VIDEO,
+        media_handler
+    )
+)
+
 app.add_handler(CallbackQueryHandler(button_handler))
 
 app.run_polling()
