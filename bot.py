@@ -1,7 +1,13 @@
 import os
 import google.generativeai as genai
 from telegram import Update
-from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters
+from telegram.ext import (
+    Application,
+    CommandHandler,
+    MessageHandler,
+    ContextTypes,
+    filters,
+)
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
@@ -12,12 +18,14 @@ model = genai.GenerativeModel("gemini-1.5-flash")
 WELCOME_TEXT = """
 🎓 SSC Study Assistant Bot
 
-Ask any SSC exam related question in Hindi or English.
+SSC preparation assistant.
+
+Hindi + English supported.
 
 Examples:
 भारत का संविधान कब लागू हुआ?
 Percentage shortcut trick
-SSC reasoning blood relation question
+Blood relation reasoning question
 """
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -25,32 +33,32 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "Send any SSC exam related question.\n\n"
+        "Ask any SSC related question.\n\n"
         "Examples:\n"
         "भारत का संविधान कब लागू हुआ?\n"
         "LCM shortcut trick\n"
-        "SSC reasoning puzzle"
+        "Reasoning puzzle"
     )
 
 async def ask_ai(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_question = update.message.text
+    question = update.message.text
 
-    await update.message.reply_text("Thinking...")
+    wait_msg = await update.message.reply_text("Thinking...")
 
     prompt = f"""
 You are an expert SSC exam teacher for Indian government exam students.
 
 Rules:
-- Answer in simple Hindi if question is Hindi.
-- Answer in English if question is English.
-- Focus only on SSC exam preparation.
-- Give accurate explanation.
-- If math, explain step by step.
-- If reasoning, solve clearly.
-- Keep answer student-friendly.
+1. If user asks in Hindi, answer in Hindi.
+2. If user asks in English, answer in English.
+3. Focus on SSC exam level explanations.
+4. Explain clearly and simply.
+5. If math, solve step by step.
+6. If reasoning, explain logic.
+7. Keep answers accurate.
 
 Question:
-{user_question}
+{question}
 """
 
     try:
@@ -60,10 +68,10 @@ Question:
         if len(answer) > 4000:
             answer = answer[:4000]
 
-        await update.message.reply_text(answer)
+        await wait_msg.edit_text(answer)
 
-    except Exception as e:
-        await update.message.reply_text("Error: AI response failed. Try again.")
+    except Exception:
+        await wait_msg.edit_text("AI error. Try again.")
 
 app = Application.builder().token(BOT_TOKEN).build()
 
