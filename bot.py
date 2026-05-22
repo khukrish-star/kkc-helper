@@ -14,7 +14,6 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_ID = 8644125887
 USERS_FILE = "users.json"
 
-users = set()
 broadcast_mode = {}
 last_broadcast_messages = []
 
@@ -37,6 +36,10 @@ users = load_users()
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
+
+    if user_id in users:
+        return
+
     users.add(user_id)
     save_users(users)
 
@@ -58,7 +61,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/help\n"
         "/myid\n"
         "/stats\n"
-        "/broadcast message\n"
+        "/broadcast your message\n"
         "/broadcastphoto\n"
         "/broadcastfile\n"
         "/broadcastvideo\n"
@@ -86,6 +89,7 @@ async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     message = " ".join(context.args)
+
     if not message:
         await update.message.reply_text("Usage: /broadcast your message")
         return
@@ -153,6 +157,7 @@ async def media_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     mode = broadcast_mode.get(ADMIN_ID)
+
     if not mode:
         return
 
@@ -183,13 +188,21 @@ async def media_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         if update.message.video:
             file_id = update.message.video.file_id
+        elif update.message.animation:
+            file_id = update.message.animation.file_id
         elif update.message.document:
             file_id = update.message.document.file_id
 
         if file_id:
             for user in users:
                 try:
-                    sent = await context.bot.send_video(chat_id=user, video=file_id)
+                    if update.message.video:
+                        sent = await context.bot.send_video(chat_id=user, video=file_id)
+                    elif update.message.animation:
+                        sent = await context.bot.send_animation(chat_id=user, animation=file_id)
+                    else:
+                        sent = await context.bot.send_document(chat_id=user, document=file_id)
+
                     last_broadcast_messages.append((user, sent.message_id))
                 except:
                     pass
@@ -207,7 +220,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif query.data == "myid":
         await query.edit_message_text(f"Your ID: {query.from_user.id}")
     elif query.data == "about":
-        await query.edit_message_text("KKC Helper Bot")
+        await query.edit_message_text("KKC Helper Bot 🚀")
 
 
 app = Application.builder().token(BOT_TOKEN).build()
@@ -224,7 +237,7 @@ app.add_handler(CommandHandler("delete_last_broadcast", delete_last_broadcast))
 
 app.add_handler(
     MessageHandler(
-        filters.PHOTO | filters.Document.ALL | filters.VIDEO,
+        filters.PHOTO | filters.Document.ALL | filters.VIDEO | filters.ANIMATION,
         media_handler
     )
 )
