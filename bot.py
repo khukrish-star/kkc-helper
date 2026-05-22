@@ -1,4 +1,5 @@
 import os
+import json
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     Application,
@@ -9,12 +10,29 @@ from telegram.ext import (
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_ID = 8644125887
+USERS_FILE = "users.json"
 
-users = set()
+
+def load_users():
+    try:
+        with open(USERS_FILE, "r") as f:
+            return set(json.load(f))
+    except:
+        return set()
+
+
+def save_users(users):
+    with open(USERS_FILE, "w") as f:
+        json.dump(list(users), f)
+
+
+users = load_users()
+
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     users.add(user_id)
+    save_users(users)
 
     keyboard = [
         [InlineKeyboardButton("Help", callback_data="help")],
@@ -29,6 +47,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=reply_markup
     )
 
+
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "/start - Start bot\n"
@@ -36,8 +55,10 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/myid - Get your Telegram ID"
     )
 
+
 async def myid(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(f"Your ID: {update.effective_user.id}")
+
 
 async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_ID:
@@ -54,6 +75,7 @@ async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text("Broadcast sent")
 
+
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -66,6 +88,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif query.data == "about":
         await query.edit_message_text("KKC Helper Bot v1 🚀")
+
 
 app = Application.builder().token(BOT_TOKEN).build()
 
