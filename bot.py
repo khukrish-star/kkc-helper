@@ -6,6 +6,8 @@ from telegram.ext import (
     CommandHandler,
     ContextTypes,
     CallbackQueryHandler,
+    MessageHandler,
+    filters,
 )
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
@@ -27,6 +29,7 @@ def save_users(users):
 
 
 users = load_users()
+broadcast_mode = {}
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -53,7 +56,10 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/start - Start bot\n"
         "/help - Help menu\n"
         "/myid - Get your Telegram ID\n"
-        "/stats - Total users (admin only)"
+        "/stats - Total users (admin only)\n"
+        "/broadcast - Send text to all users\n"
+        "/broadcastphoto - Send photo to all users\n"
+        "/broadcastfile - Send file to all users"
     )
 
 
@@ -86,7 +92,56 @@ async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except:
             pass
 
-    await update.message.reply_text("Broadcast sent")
+    await update.message.reply_text("Text broadcast sent")
+
+
+async def broadcast_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id != ADMIN_ID:
+        await update.message.reply_text("Not authorized")
+        return
+
+    broadcast_mode[update.effective_user.id] = "photo"
+    await update.message.reply_text("Now send the photo")
+
+
+async def broadcast_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id != ADMIN_ID:
+        await update.message.reply_text("Not authorized")
+        return
+
+    broadcast_mode[update.effective_user.id] = "file"
+    await update.message.reply_text("Now send the file")
+
+
+async def media_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id != ADMIN_ID:
+        return
+
+    mode = broadcast_mode.get(update.effective_user.id)
+
+    if mode == "photo" and update.message.photo:
+        photo = update.message.photo[-1].file_id
+
+        for user in users:
+            try:
+                await context.bot.send_photo(chat_id=user, photo=photo)
+            except:
+                pass
+
+        broadcast_mode.pop(update.effective_user.id, None)
+        await update.message.reply_text("Photo broadcast sent")
+
+    elif mode == "file" and update.message.document:
+        document = update.message.document.file_id
+
+        for user in users:
+            try:
+                await context.bot.send_document(chat_id=user, document=document)
+            except:
+                pass
+
+        broadcast_mode.pop(update.effective_user.id, None)
+        await update.message.reply_text("File broadcast sent")
 
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -100,7 +155,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text(f"Your Telegram ID: {query.from_user.id}")
 
     elif query.data == "about":
-        await query.edit_message_text("KKC Helper Bot v1 🚀")
+        await query.edit_message_text("KKC Helper Bot v2 🚀")
 
 
 app = Application.builder().token(BOT_TOKEN).build()
@@ -110,6 +165,9 @@ app.add_handler(CommandHandler("help", help_command))
 app.add_handler(CommandHandler("myid", myid))
 app.add_handler(CommandHandler("stats", stats))
 app.add_handler(CommandHandler("broadcast", broadcast))
+app.add_handler(CommandHandler("broadcastphoto", broadcast_photo))
+app.add_handler(CommandHandler("broadcastfile", broadcast_file))
+app.add_handler(MessageHandler(filters.PHOTO | filters.Document.ALL, media_handler))
 app.add_handler(CallbackQueryHandler(button_handler))
 
 app.run_polling()
