@@ -1,4 +1,5 @@
 import os
+import traceback
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     Application,
@@ -16,38 +17,26 @@ active_tests = {}
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "🎓 Welcome to KKC Helper Bot\n\n"
-        "SSC preparation assistant.\n"
-        "Commands:\n"
-        "/help - Help\n"
-        "/starttest - Mock Test\n"
-        "/schedule - Daily schedule"
-    )
+    await update.message.reply_text("KKC Helper Bot Active ✅")
 
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "Commands:\n"
-        "/start → Start bot\n"
-        "/help → Help\n"
-        "/starttest → Mock test\n"
-        "/schedule → Daily auto test schedule\n\n"
-        "Ask SSC doubts directly:\n"
-        "भारत का संविधान कब लागू हुआ?\n"
-        "Percentage shortcut trick\n"
-        "Coding decoding question"
+        "/start\n"
+        "/help\n"
+        "/starttest\n"
+        "/schedule\n\n"
+        "Ask any SSC question directly."
     )
 
 
 async def schedule(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "📅 Daily Auto Test Schedule\n\n"
-        "📝 SSC CGL → 07:00\n"
-        "📝 SSC CPO → 11:00\n"
-        "📝 SSC CHSL → 15:00\n"
-        "📝 SSC MTS → 19:00\n"
-        "📝 SSC GD → 21:00"
+        "SSC CGL → 07:00\n"
+        "SSC CPO → 11:00\n"
+        "SSC CHSL → 15:00\n"
+        "SSC MTS → 19:00\n"
+        "SSC GD → 21:00"
     )
 
 
@@ -58,18 +47,17 @@ async def start_test(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("Reasoning", callback_data="subject_reasoning")],
         [InlineKeyboardButton("English", callback_data="subject_english")],
     ]
-
     await update.message.reply_text(
         "Choose Subject:",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
 
-async def send_question(query, user_id, context):
+async def send_question(query, user_id):
     test = active_tests[user_id]
 
     if test["current"] >= len(test["questions"]):
-        await finish_test(query, user_id, context)
+        await finish_test(query, user_id)
         return
 
     q = test["questions"][test["current"]]
@@ -85,16 +73,16 @@ async def send_question(query, user_id, context):
         ]
     ]
 
-    text = (
-        f"Q{test['current'] + 1}/{len(test['questions'])}\n\n"
-        f"📘 Topic: {q['topic']}\n"
-        f"🏆 Likely Exam: {q['exam']} {q['year']}\n\n"
-        f"{q['question']}\n\n"
-        f"A) {q['options']['A']}\n"
-        f"B) {q['options']['B']}\n"
-        f"C) {q['options']['C']}\n"
-        f"D) {q['options']['D']}"
-    )
+    text = f"""
+Q{test['current'] + 1}/{len(test['questions'])}
+
+{q['question']}
+
+A) {q['options']['A']}
+B) {q['options']['B']}
+C) {q['options']['C']}
+D) {q['options']['D']}
+"""
 
     await query.message.reply_text(
         text,
@@ -102,25 +90,15 @@ async def send_question(query, user_id, context):
     )
 
 
-async def finish_test(query, user_id, context):
+async def finish_test(query, user_id):
     test = active_tests[user_id]
 
-    total = len(test["questions"])
-    correct = test["correct"]
-    wrong = test["wrong"]
-    score = test["score"]
-
-    accuracy = (correct / total) * 100 if total > 0 else 0
-
-    msg = (
-        "✅ TEST COMPLETED\n\n"
-        f"📊 Score: {score}\n"
-        f"✅ Correct: {correct}\n"
-        f"❌ Wrong: {wrong}\n"
-        f"🎯 Accuracy: {accuracy:.1f}%"
+    await query.message.reply_text(
+        f"Test Complete ✅\n"
+        f"Score: {test['score']}\n"
+        f"Correct: {test['correct']}\n"
+        f"Wrong: {test['wrong']}"
     )
-
-    await query.message.reply_text(msg)
 
     del active_tests[user_id]
 
@@ -133,18 +111,17 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if query.data.startswith("subject_"):
         subject = query.data.replace("subject_", "")
-
-        questions = generate_mock_test(subject, 8)
+        questions = generate_mock_test(subject, 5)
 
         active_tests[user_id] = {
             "questions": questions,
             "current": 0,
             "score": 0,
             "correct": 0,
-            "wrong": 0,
+            "wrong": 0
         }
 
-        await send_question(query, user_id, context)
+        await send_question(query, user_id)
 
     elif query.data.startswith("ans_"):
         selected = query.data.replace("ans_", "")
@@ -155,12 +132,10 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             test["score"] += 2
             test["correct"] += 1
         else:
-            test["score"] -= 0.5
             test["wrong"] += 1
 
         test["current"] += 1
-
-        await send_question(query, user_id, context)
+        await send_question(query, user_id)
 
 
 async def ask_ai(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -170,7 +145,8 @@ async def ask_ai(update: Update, context: ContextTypes.DEFAULT_TYPE):
         answer = ask_ssc_ai(question, "Hindi")
         await update.message.reply_text(answer)
     except Exception as e:
-        await update.message.reply_text(f"AI Error: {str(e)}")
+        await update.message.reply_text("AI failed.")
+        print(traceback.format_exc())
 
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
@@ -182,13 +158,7 @@ app.add_handler(CommandHandler("help", help_command))
 app.add_handler(CommandHandler("schedule", schedule))
 app.add_handler(CommandHandler("starttest", start_test))
 app.add_handler(CallbackQueryHandler(button_handler))
+app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, ask_ai))
 
-app.add_handler(
-    MessageHandler(
-        filters.TEXT & ~filters.COMMAND,
-        ask_ai
-    )
-)
-
-print("KKC Bot running...")
+print("Bot running...")
 app.run_polling()
