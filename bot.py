@@ -40,6 +40,7 @@ Features:
 ✅ Mock Tests
 ✅ Weak Topic Analysis
 ✅ Performance Report
+✅ Time Tracking
 
 Commands:
 /start
@@ -54,17 +55,22 @@ def safe_json_parse(content):
         content = content.replace("```json", "").replace("```", "").strip()
         return json.loads(content)
 
+
 def get_performance(score, total):
     percent = (score / total) * 100
 
     if percent >= 85:
-        return "🔥 Excellent Exam Readiness", "Very strong performance. Maintain consistency."
+        return "🔥 Excellent Exam Readiness", "Your preparation is very strong. Maintain consistency."
+
     elif percent >= 70:
-        return "⚡ Strong Performer", "Good preparation. Improve speed + accuracy."
+        return "⚡ Strong Performer", "Good preparation. Improve speed and accuracy."
+
     elif percent >= 50:
-        return "📘 Average Performer", "Need regular mock practice."
+        return "📘 Average Performer", "Need more mock practice and revision."
+
     else:
         return "⚠️ Needs Serious Improvement", "Focus on basics and daily practice."
+
 
 def format_time(seconds):
     mins = int(seconds // 60)
@@ -82,7 +88,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 Commands:
 /starttest → Start Mock Test
 
-Ask any SSC question:
+Examples:
 भारत का संविधान कब लागू हुआ?
 Percentage shortcut trick
 Reasoning puzzle
@@ -105,11 +111,13 @@ async def ask_ai(update: Update, context: ContextTypes.DEFAULT_TYPE):
 Rules:
 1. Hindi question = Hindi answer
 2. English question = English answer
-3. Give short exam-focused answers
-4. Mention SSC previous year exam if likely known
-5. For math: step-by-step shortcut
-6. For reasoning: explain logic
-7. Focus only on SSC preparation"""
+3. Short exam-focused answers
+4. Mention likely SSC previous year exam if known
+5. For math = shortcut method
+6. For reasoning = logic explanation
+7. Focus only on SSC preparation
+8. For GK = exact factual answer
+9. Important facts in bullet points"""
                 },
                 {
                     "role": "user",
@@ -128,6 +136,9 @@ Rules:
 
 
 async def start_test(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id in active_tests:
+        del active_tests[update.effective_user.id]
+
     keyboard = [
         [InlineKeyboardButton("GK", callback_data="subject_gk")],
         [InlineKeyboardButton("Math", callback_data="subject_math")],
@@ -147,39 +158,45 @@ Generate {count} realistic SSC exam level MCQs for {subject} in {language}.
 
 Rules:
 1. Real SSC exam difficulty
-2. Exam hall level quality
-3. 4 options A B C D
+2. Exact exam hall level quality
+3. 4 options A/B/C/D
 4. Include topic
-5. Include likely exam and year
-6. Return ONLY JSON
+5. Include likely SSC exam and year
+6. Return ONLY valid JSON
 
 Format:
 [
- {{
-   "question":"question",
-   "options": {{
-      "A":"option",
-      "B":"option",
-      "C":"option",
-      "D":"option"
-   }},
-   "answer":"A",
-   "topic":"Percentage",
-   "exam":"SSC CGL",
-   "year":"2022"
- }}
+  {{
+    "question":"Question text",
+    "options": {{
+      "A":"Option A",
+      "B":"Option B",
+      "C":"Option C",
+      "D":"Option D"
+    }},
+    "answer":"A",
+    "topic":"Percentage",
+    "exam":"SSC CGL",
+    "year":"2022"
+  }}
 ]
 """
 
     response = client.chat.completions.create(
         model="llama-3.3-70b-versatile",
-        messages=[{"role": "user", "content": prompt}],
+        messages=[
+            {
+                "role": "user",
+                "content": prompt
+            }
+        ],
         temperature=0.5,
         max_tokens=4000
     )
 
     content = response.choices[0].message.content
-    return safe_json_parse(content)async def send_question(query, user_id, context):
+    return safe_json_parse(content)
+    async def send_question(query, user_id, context):
     test = active_tests[user_id]
 
     if test["current"] >= len(test["questions"]):
@@ -200,7 +217,7 @@ Format:
     ]
 
     text = f"""
-Q{test['current']+1}/{len(test['questions'])}
+Q{test['current'] + 1}/{len(test['questions'])}
 
 📘 Topic: {q['topic']}
 🏆 Likely Exam: {q['exam']} {q['year']}
@@ -247,7 +264,7 @@ async def finish_test(query, user_id, context):
     accuracy = 0
     if total_questions > 0:
         accuracy = round(
-            ((test["correct"] / total_questions) * 100),
+            (test["correct"] / total_questions) * 100,
             1
         )
 
@@ -358,12 +375,14 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         test["current"] += 1
 
-        await send_question(query, user_id, context)app = Application.builder().token(BOT_TOKEN).build()
+        await send_question(query, user_id, context)
+
+
+app = Application.builder().token(BOT_TOKEN).build()
 
 app.add_handler(CommandHandler("start", start))
 app.add_handler(CommandHandler("help", help_command))
 app.add_handler(CommandHandler("starttest", start_test))
-
 app.add_handler(CallbackQueryHandler(button_handler))
 
 app.add_handler(
