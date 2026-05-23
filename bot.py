@@ -61,7 +61,22 @@ Rules:
 7. For reasoning: explain logic clearly
 8. Avoid unnecessary long paragraphs
 9. Focus only on SSC exam related study help
-10. If asked off-topic, politely redirect to SSC study"""
+10. If asked off-topic, politely redirect to SSC study
+11. If this question has appeared in SSC exams before, mention likely SSC exam names and years
+12. Format response like:
+
+Answer:
+• exact answer
+
+SSC Previous Year:
+• SSC CGL 20XX
+• SSC CHSL 20XX
+(or say "No verified previous year data available" if uncertain)
+
+Shortcut / Tip:
+• short memory trick if useful
+
+13. Never make false exact claims if unsure"""
                 },
                 {
                     "role": "user",
@@ -69,7 +84,7 @@ Rules:
                 }
             ],
             temperature=0.3,
-            max_tokens=1000
+            max_tokens=1200
         )
 
         answer = response.choices[0].message.content
