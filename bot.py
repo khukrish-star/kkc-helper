@@ -41,7 +41,6 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def ask_ai(update: Update, context: ContextTypes.DEFAULT_TYPE):
     question = update.message.text
-
     wait_msg = await update.message.reply_text("Thinking...")
 
     try:
@@ -53,21 +52,24 @@ async def ask_ai(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     "content": """You are an expert SSC exam teacher for Indian students.
 
 Rules:
-1. If user asks in Hindi, answer in Hindi.
-2. If user asks in English, answer in English.
-3. Focus only on SSC exam related study help.
-4. Explain clearly and simply.
-5. If math, solve step by step.
-6. If reasoning, explain logic.
-7. Keep answers accurate and short."""
+1. Hindi question = Hindi answer
+2. English question = English answer
+3. Give short exam-focused answers
+4. Important facts in bullet points
+5. For GK: exact factual answer
+6. For math: step-by-step shortcut method
+7. For reasoning: explain logic clearly
+8. Avoid unnecessary long paragraphs
+9. Focus only on SSC exam related study help
+10. If asked off-topic, politely redirect to SSC study"""
                 },
                 {
                     "role": "user",
                     "content": question
                 }
             ],
-            temperature=0.4,
-            max_tokens=1200
+            temperature=0.3,
+            max_tokens=1000
         )
 
         answer = response.choices[0].message.content
