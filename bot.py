@@ -1,5 +1,6 @@
 import os
 import json
+import time
 from groq import Groq
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
@@ -34,13 +35,41 @@ LANGUAGE_MAP = {
 WELCOME_TEXT = """
 🎓 SSC Study Assistant Bot
 
+Features:
+✅ SSC Q&A
+✅ Mock Tests
+✅ Weak Topic Analysis
+✅ Performance Report
+
 Commands:
 /start
 /help
 /starttest
-
-Ask SSC questions in Hindi or English.
 """
+
+def safe_json_parse(content):
+    try:
+        return json.loads(content)
+    except:
+        content = content.replace("```json", "").replace("```", "").strip()
+        return json.loads(content)
+
+def get_performance(score, total):
+    percent = (score / total) * 100
+
+    if percent >= 85:
+        return "🔥 Excellent Exam Readiness", "Very strong performance. Maintain consistency."
+    elif percent >= 70:
+        return "⚡ Strong Performer", "Good preparation. Improve speed + accuracy."
+    elif percent >= 50:
+        return "📘 Average Performer", "Need regular mock practice."
+    else:
+        return "⚠️ Needs Serious Improvement", "Focus on basics and daily practice."
+
+def format_time(seconds):
+    mins = int(seconds // 60)
+    secs = int(seconds % 60)
+    return f"{mins} min {secs} sec"
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -51,9 +80,9 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         """
 Commands:
-/starttest → Start mock test
+/starttest → Start Mock Test
 
-Examples:
+Ask any SSC question:
 भारत का संविधान कब लागू हुआ?
 Percentage shortcut trick
 Reasoning puzzle
@@ -71,20 +100,16 @@ async def ask_ai(update: Update, context: ContextTypes.DEFAULT_TYPE):
             messages=[
                 {
                     "role": "system",
-                    "content": """You are an expert SSC exam teacher for Indian students.
+                    "content": """You are an expert SSC exam teacher.
 
 Rules:
 1. Hindi question = Hindi answer
 2. English question = English answer
 3. Give short exam-focused answers
-4. Important facts in bullet points
-5. For GK: exact factual answer
-6. Mention SSC previous year exam years if known
-7. For math: step-by-step shortcut method
-8. For reasoning: explain logic clearly
-9. Avoid unnecessary long paragraphs
-10. Focus only on SSC exam related study help
-11. If asked off-topic, politely redirect"""
+4. Mention SSC previous year exam if likely known
+5. For math: step-by-step shortcut
+6. For reasoning: explain logic
+7. Focus only on SSC preparation"""
                 },
                 {
                     "role": "user",
@@ -118,20 +143,20 @@ async def start_test(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def generate_questions(subject, count, language):
     prompt = f"""
-Generate {count} realistic SSC exam level multiple choice questions for {subject} in {language}.
+Generate {count} realistic SSC exam level MCQs for {subject} in {language}.
 
 Rules:
 1. Real SSC exam difficulty
-2. Real exam hall feeling
+2. Exam hall level quality
 3. 4 options A B C D
 4. Include topic
-5. Return ONLY valid JSON
-6. Questions should challenge weak and strong students both
+5. Include likely exam and year
+6. Return ONLY JSON
 
 Format:
 [
  {{
-   "question":"question text",
+   "question":"question",
    "options": {{
       "A":"option",
       "B":"option",
@@ -139,7 +164,9 @@ Format:
       "D":"option"
    }},
    "answer":"A",
-   "topic":"Percentage"
+   "topic":"Percentage",
+   "exam":"SSC CGL",
+   "year":"2022"
  }}
 ]
 """
@@ -148,170 +175,8 @@ Format:
         model="llama-3.3-70b-versatile",
         messages=[{"role": "user", "content": prompt}],
         temperature=0.5,
-        max_tokens=3500
+        max_tokens=4000
     )
 
     content = response.choices[0].message.content
-    return json.loads(content)
-
-
-async def send_question(query, user_id, context):
-    test = active_tests[user_id]
-
-    if test["current"] >= len(test["questions"]):
-        score = test["score"]
-        wrong = test["wrong"]
-        weak_topics = {}
-
-        for item in test["wrong_topics"]:
-            weak_topics[item] = weak_topics.get(item, 0) + 1
-
-        weak_text = "\n".join(
-            [f"• {k}: {v} mistakes" for k, v in weak_topics.items()]
-        )
-
-        result = f"""
-✅ Test Completed
-
-📊 Final Score: {score}
-❌ Wrong Answers: {wrong}
-
-📉 Weak Topics:
-{weak_text if weak_text else "None"}
-
-🎯 Improvement Tips:
-• Practice weak topics daily
-• Focus on speed + accuracy
-• Revise shortcuts
-• Attempt timed mock tests regularly
-"""
-
-        await context.bot.send_message(
-            chat_id=query.message.chat_id,
-            text=result
-        )
-        return
-
-    q = test["questions"][test["current"]]
-
-    keyboard = [
-        [
-            InlineKeyboardButton("A", callback_data="ans_A"),
-            InlineKeyboardButton("B", callback_data="ans_B"),
-        ],
-        [
-            InlineKeyboardButton("C", callback_data="ans_C"),
-            InlineKeyboardButton("D", callback_data="ans_D"),
-        ],
-    ]
-
-    text = f"""
-Q{test['current']+1}/{len(test['questions'])}
-
-📘 Topic: {q['topic']}
-
-{q['question']}
-
-A) {q['options']['A']}
-B) {q['options']['B']}
-C) {q['options']['C']}
-D) {q['options']['D']}
-"""
-
-    await context.bot.send_message(
-        chat_id=query.message.chat_id,
-        text=text,
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
-
-
-async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-
-    user_id = query.from_user.id
-
-    if query.data.startswith("subject_"):
-        subject = query.data.replace("subject_", "")
-
-        active_tests[user_id] = {
-            "subject": subject,
-            "language": None,
-            "questions": [],
-            "current": 0,
-            "score": 0,
-            "wrong": 0,
-            "wrong_topics": []
-        }
-
-        keyboard = [
-            [InlineKeyboardButton("English", callback_data="lang_english")],
-            [InlineKeyboardButton("Hindi", callback_data="lang_hindi")],
-        ]
-
-        await query.edit_message_text(
-            "Choose Language:",
-            reply_markup=InlineKeyboardMarkup(keyboard)
-        )
-
-    elif query.data.startswith("lang_"):
-        lang = query.data.replace("lang_", "")
-        active_tests[user_id]["language"] = LANGUAGE_MAP[lang]
-
-        keyboard = [
-            [InlineKeyboardButton("10 min", callback_data="time_10")],
-            [InlineKeyboardButton("15 min", callback_data="time_15")],
-            [InlineKeyboardButton("20 min", callback_data="time_20")],
-            [InlineKeyboardButton("25 min", callback_data="time_25")],
-            [InlineKeyboardButton("30 min", callback_data="time_30")],
-        ]
-
-        await query.edit_message_text(
-            "Choose Time:",
-            reply_markup=InlineKeyboardMarkup(keyboard)
-        )
-
-    elif query.data.startswith("time_"):
-        mins = int(query.data.replace("time_", ""))
-        count = TIME_MAP[mins]
-
-        await query.edit_message_text("Generating exam-level mock test...")
-
-        questions = await generate_questions(
-            active_tests[user_id]["subject"],
-            count,
-            active_tests[user_id]["language"]
-        )
-
-        active_tests[user_id]["questions"] = questions
-        active_tests[user_id]["current"] = 0
-
-        await send_question(query, user_id, context)
-
-    elif query.data.startswith("ans_"):
-        selected = query.data.replace("ans_", "")
-        test = active_tests[user_id]
-        q = test["questions"][test["current"]]
-
-        if selected == q["answer"]:
-            test["score"] += 2
-        else:
-            test["score"] -= 0.5
-            test["wrong"] += 1
-            test["wrong_topics"].append(q["topic"])
-
-        test["current"] += 1
-
-        await send_question(query, user_id, context)
-
-
-app = Application.builder().token(BOT_TOKEN).build()
-
-app.add_handler(CommandHandler("start", start))
-app.add_handler(CommandHandler("help", help_command))
-app.add_handler(CommandHandler("starttest", start_test))
-app.add_handler(CallbackQueryHandler(button_handler))
-app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, ask_ai))
-
-print("Bot running...")
-app.run_polling()
+    return safe_json_parse(content)
