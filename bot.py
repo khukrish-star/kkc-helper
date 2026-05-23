@@ -1,4 +1,5 @@
 import os
+import json
 from groq import Groq
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
@@ -22,8 +23,8 @@ WELCOME_TEXT = """
 
 Features:
 ✅ SSC Q&A
-✅ Maths / Reasoning / English / GK help
-✅ Mock Test Mode
+✅ Mock Tests
+✅ Subject Practice
 
 Commands:
 /start
@@ -48,13 +49,51 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         """
 Commands:
-/start - Start bot
-/help - Help
-/starttest - Start mock test
-
-Normal SSC questions also supported.
+/start
+/help
+/starttest
 """
     )
+
+
+async def generate_questions(subject, count):
+    prompt = f"""
+Generate {count} realistic SSC exam level multiple choice questions for {subject}.
+
+Rules:
+1. Real SSC exam difficulty
+2. Questions should feel like exam hall level
+3. 4 options A, B, C, D
+4. Include topic name
+5. Return ONLY valid JSON list
+
+Format:
+[
+ {{
+   "question": "question text",
+   "options": {{
+      "A": "option A",
+      "B": "option B",
+      "C": "option C",
+      "D": "option D"
+   }},
+   "answer": "A",
+   "topic": "Percentage"
+ }}
+]
+"""
+
+    response = client.chat.completions.create(
+        model="llama-3.3-70b-versatile",
+        messages=[
+            {"role": "user", "content": prompt}
+        ],
+        temperature=0.4,
+        max_tokens=3000
+    )
+
+    content = response.choices[0].message.content
+    return json.loads(content)
 
 
 async def start_test(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -65,11 +104,49 @@ async def start_test(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("GK", callback_data="subject_gk")],
     ]
 
-    reply_markup = InlineKeyboardMarkup(keyboard)
-
     await update.message.reply_text(
         "Choose Subject:",
-        reply_markup=reply_markup
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+
+
+async def send_question(query, user_id):
+    test = active_tests[user_id]
+    current = test["current"]
+
+    if current >= len(test["questions"]):
+        await query.message.reply_text("Test completed. Part 3 will add scoring.")
+        return
+
+    q = test["questions"][current]
+
+    keyboard = [
+        [
+            InlineKeyboardButton("A", callback_data="answer_A"),
+            InlineKeyboardButton("B", callback_data="answer_B"),
+        ],
+        [
+            InlineKeyboardButton("C", callback_data="answer_C"),
+            InlineKeyboardButton("D", callback_data="answer_D"),
+        ]
+    ]
+
+    text = f"""
+Q{current+1}/{len(test['questions'])}
+
+Topic: {q['topic']}
+
+{q['question']}
+
+A) {q['options']['A']}
+B) {q['options']['B']}
+C) {q['options']['C']}
+D) {q['options']['D']}
+"""
+
+    await query.message.reply_text(
+        text,
+        reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
 
@@ -94,39 +171,36 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton("30 min", callback_data="time_30")],
         ]
 
-        reply_markup = InlineKeyboardMarkup(keyboard)
-
         await query.edit_message_text(
             f"Subject Selected: {subject.upper()}\n\nChoose Time:",
-            reply_markup=reply_markup
+            reply_markup=InlineKeyboardMarkup(keyboard)
         )
 
     elif query.data.startswith("time_"):
         minutes = query.data.replace("time_", "")
         question_count = TIME_MAP[minutes]
 
-        if user_id not in active_tests:
-            await query.edit_message_text("Session expired. Type /starttest")
-            return
+        await query.edit_message_text("Generating realistic SSC questions...")
+
+        questions = await generate_questions(
+            active_tests[user_id]["subject"],
+            question_count
+        )
 
         active_tests[user_id]["time"] = minutes
-        active_tests[user_id]["questions"] = question_count
+        active_tests[user_id]["questions"] = questions
+        active_tests[user_id]["current"] = 0
+        active_tests[user_id]["answers"] = []
 
-        await query.edit_message_text(
-            f"""
-Mock Test Ready ✅
+        await send_question(query, user_id)
 
-Subject: {active_tests[user_id]['subject'].upper()}
-Time: {minutes} minutes
-Questions: {question_count}
+    elif query.data.startswith("answer_"):
+        answer = query.data.replace("answer_", "")
 
-Negative Marking:
-+2 correct
--0.50 wrong
+        active_tests[user_id]["answers"].append(answer)
+        active_tests[user_id]["current"] += 1
 
-Part 2 will generate actual questions.
-"""
-        )
+        await send_question(query, user_id)
 
 
 async def ask_ai(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -142,12 +216,10 @@ async def ask_ai(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     "content": """You are an expert SSC exam teacher.
 
 Rules:
-1. Hindi question = Hindi answer
-2. English question = English answer
-3. Short exam-focused answers
-4. Maths = step-by-step shortcut
-5. Reasoning = logic explanation
-6. SSC-focused only"""
+1. Hindi = Hindi
+2. English = English
+3. SSC-focused answers
+4. Short clear explanations"""
                 },
                 {
                     "role": "user",
