@@ -28,8 +28,10 @@ Percentage shortcut trick
 Blood relation reasoning question
 """
 
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(WELCOME_TEXT)
+
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
@@ -40,6 +42,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Reasoning puzzle"
     )
 
+
 async def ask_ai(update: Update, context: ContextTypes.DEFAULT_TYPE):
     question = update.message.text
 
@@ -49,13 +52,12 @@ async def ask_ai(update: Update, context: ContextTypes.DEFAULT_TYPE):
 You are an expert SSC exam teacher for Indian government exam students.
 
 Rules:
-1. If user asks in Hindi, answer in Hindi.
-2. If user asks in English, answer in English.
-3. Focus on SSC exam level explanations.
-4. Explain clearly and simply.
-5. If math, solve step by step.
-6. If reasoning, explain logic.
-7. Keep answers accurate.
+- Answer in same language as user
+- Focus only on SSC exam preparation
+- Give accurate answers
+- If maths, solve step by step
+- If reasoning, explain logic clearly
+- Keep response simple and useful
 
 Question:
 {question}
@@ -63,15 +65,26 @@ Question:
 
     try:
         response = model.generate_content(prompt)
-        answer = response.text
+
+        if not response:
+            await wait_msg.edit_text("No AI response received.")
+            return
+
+        answer = ""
+
+        if hasattr(response, "text") and response.text:
+            answer = response.text
+        else:
+            answer = str(response)
 
         if len(answer) > 4000:
             answer = answer[:4000]
 
         await wait_msg.edit_text(answer)
 
-    except Exception:
-        await wait_msg.edit_text("AI error. Try again.")
+    except Exception as e:
+        await wait_msg.edit_text(f"AI Error:\n{str(e)}")
+
 
 app = Application.builder().token(BOT_TOKEN).build()
 
