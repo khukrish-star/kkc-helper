@@ -35,7 +35,6 @@ WELCOME_TEXT = """
 🎓 SSC Study Assistant Bot
 
 Commands:
-
 /start
 /help
 /starttest
@@ -43,8 +42,10 @@ Commands:
 Ask SSC questions in Hindi or English.
 """
 
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(WELCOME_TEXT)
+
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
@@ -52,12 +53,13 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 Commands:
 /starttest → Start mock test
 
-Ask:
+Examples:
 भारत का संविधान कब लागू हुआ?
 Percentage shortcut trick
 Reasoning puzzle
 """
     )
+
 
 async def ask_ai(update: Update, context: ContextTypes.DEFAULT_TYPE):
     question = update.message.text
@@ -124,6 +126,7 @@ Rules:
 3. 4 options A B C D
 4. Include topic
 5. Return ONLY valid JSON
+6. Questions should challenge weak and strong students both
 
 Format:
 [
@@ -144,14 +147,15 @@ Format:
     response = client.chat.completions.create(
         model="llama-3.3-70b-versatile",
         messages=[{"role": "user", "content": prompt}],
-        temperature=0.4,
-        max_tokens=3000
+        temperature=0.5,
+        max_tokens=3500
     )
 
-    return json.loads(response.choices[0].message.content)
+    content = response.choices[0].message.content
+    return json.loads(content)
 
 
-async def send_question(query, user_id):
+async def send_question(query, user_id, context):
     test = active_tests[user_id]
 
     if test["current"] >= len(test["questions"]):
@@ -169,19 +173,23 @@ async def send_question(query, user_id):
         result = f"""
 ✅ Test Completed
 
-Score: {score}
-Wrong Answers: {wrong}
+📊 Final Score: {score}
+❌ Wrong Answers: {wrong}
 
-Weak Topics:
+📉 Weak Topics:
 {weak_text if weak_text else "None"}
 
-Improvement Tips:
+🎯 Improvement Tips:
 • Practice weak topics daily
 • Focus on speed + accuracy
 • Revise shortcuts
+• Attempt timed mock tests regularly
 """
 
-        await query.edit_message_text(result)
+        await context.bot.send_message(
+            chat_id=query.message.chat_id,
+            text=result
+        )
         return
 
     q = test["questions"][test["current"]]
@@ -200,7 +208,7 @@ Improvement Tips:
     text = f"""
 Q{test['current']+1}/{len(test['questions'])}
 
-Topic: {q['topic']}
+📘 Topic: {q['topic']}
 
 {q['question']}
 
@@ -210,8 +218,9 @@ C) {q['options']['C']}
 D) {q['options']['D']}
 """
 
-    await query.edit_message_text(
-        text,
+    await context.bot.send_message(
+        chat_id=query.message.chat_id,
+        text=text,
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
@@ -277,7 +286,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         active_tests[user_id]["questions"] = questions
         active_tests[user_id]["current"] = 0
 
-        await send_question(query, user_id)
+        await send_question(query, user_id, context)
 
     elif query.data.startswith("ans_"):
         selected = query.data.replace("ans_", "")
@@ -292,7 +301,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             test["wrong_topics"].append(q["topic"])
 
         test["current"] += 1
-        await send_question(query, user_id)
+
+        await send_question(query, user_id, context)
 
 
 app = Application.builder().token(BOT_TOKEN).build()
