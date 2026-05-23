@@ -16,7 +16,6 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
 client = Groq(api_key=GROQ_API_KEY)
-
 active_tests = {}
 
 TIME_MAP = {
@@ -35,13 +34,6 @@ LANGUAGE_MAP = {
 WELCOME_TEXT = """
 🎓 SSC Study Assistant Bot
 
-Features:
-✅ SSC Q&A
-✅ Mock Tests
-✅ Weak Topic Analysis
-✅ Performance Report
-✅ Time Tracking
-
 Commands:
 /start
 /help
@@ -55,37 +47,29 @@ def safe_json_parse(content):
         content = content.replace("```json", "").replace("```", "").strip()
         return json.loads(content)
 
-
 def get_performance(score, total):
-    percent = (score / total) * 100
+    percent = (score / total) * 100 if total else 0
 
     if percent >= 85:
-        return "🔥 Excellent Exam Readiness", "Your preparation is very strong. Maintain consistency."
-
+        return "🔥 Excellent Exam Readiness", "Very strong performance. Maintain consistency."
     elif percent >= 70:
         return "⚡ Strong Performer", "Good preparation. Improve speed and accuracy."
-
     elif percent >= 50:
         return "📘 Average Performer", "Need more mock practice and revision."
-
     else:
         return "⚠️ Needs Serious Improvement", "Focus on basics and daily practice."
-
 
 def format_time(seconds):
     mins = int(seconds // 60)
     secs = int(seconds % 60)
     return f"{mins} min {secs} sec"
 
-
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(WELCOME_TEXT)
-
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         """
-Commands:
 /starttest → Start Mock Test
 
 Examples:
@@ -94,7 +78,6 @@ Percentage shortcut trick
 Reasoning puzzle
 """
     )
-
 
 async def ask_ai(update: Update, context: ContextTypes.DEFAULT_TYPE):
     question = update.message.text
@@ -113,11 +96,9 @@ Rules:
 2. English question = English answer
 3. Short exam-focused answers
 4. Mention likely SSC previous year exam if known
-5. For math = shortcut method
-6. For reasoning = logic explanation
-7. Focus only on SSC preparation
-8. For GK = exact factual answer
-9. Important facts in bullet points"""
+5. Math = shortcut method
+6. Reasoning = logic explanation
+7. Focus only on SSC preparation"""
                 },
                 {
                     "role": "user",
@@ -134,10 +115,11 @@ Rules:
     except Exception as e:
         await wait_msg.edit_text(f"AI Error:\n{str(e)}")
 
-
 async def start_test(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id in active_tests:
-        del active_tests[update.effective_user.id]
+    user_id = update.effective_user.id
+
+    if user_id in active_tests:
+        del active_tests[user_id]
 
     keyboard = [
         [InlineKeyboardButton("GK", callback_data="subject_gk")],
@@ -150,7 +132,6 @@ async def start_test(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Choose Subject:",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
-
 
 async def generate_questions(subject, count, language):
     prompt = f"""
@@ -196,7 +177,8 @@ Format:
 
     content = response.choices[0].message.content
     return safe_json_parse(content)
-    async def send_question(query, user_id, context):
+
+async def send_question(query, user_id, context):
     test = active_tests[user_id]
 
     if test["current"] >= len(test["questions"]):
@@ -236,16 +218,16 @@ D) {q['options']['D']}
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
-
 async def finish_test(query, user_id, context):
     test = active_tests[user_id]
 
-    end_time = time.time()
-    total_seconds = end_time - test["start_time"]
-    total_time = format_time(total_seconds)
-
     total_questions = len(test["questions"])
     total_marks = total_questions * 2
+    total_time = format_time(time.time() - test["start_time"])
+
+    accuracy = 0
+    if total_questions > 0:
+        accuracy = round((test["correct"] / total_questions) * 100, 1)
 
     performance_title, effort_msg = get_performance(
         test["score"],
@@ -260,13 +242,6 @@ async def finish_test(query, user_id, context):
     weak_text = "\n".join(
         [f"• {k}: {v} mistakes" for k, v in weak_topics.items()]
     )
-
-    accuracy = 0
-    if total_questions > 0:
-        accuracy = round(
-            (test["correct"] / total_questions) * 100,
-            1
-        )
 
     result = f"""
 ✅ TEST COMPLETED
@@ -292,7 +267,6 @@ async def finish_test(query, user_id, context):
     )
 
     del active_tests[user_id]
-
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -377,20 +351,13 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         await send_question(query, user_id, context)
 
-
 app = Application.builder().token(BOT_TOKEN).build()
 
 app.add_handler(CommandHandler("start", start))
 app.add_handler(CommandHandler("help", help_command))
 app.add_handler(CommandHandler("starttest", start_test))
 app.add_handler(CallbackQueryHandler(button_handler))
-
-app.add_handler(
-    MessageHandler(
-        filters.TEXT & ~filters.COMMAND,
-        ask_ai
-    )
-)
+app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, ask_ai))
 
 print("SSC Bot running...")
 app.run_polling()
