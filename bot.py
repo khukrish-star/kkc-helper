@@ -179,9 +179,7 @@ Format:
     )
 
     content = response.choices[0].message.content
-    return safe_json_parse(content)
-
-async def send_question(query, user_id, context):
+    return safe_json_parse(content)async def send_question(query, user_id, context):
     test = active_tests[user_id]
 
     if test["current"] >= len(test["questions"]):
@@ -360,8 +358,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         test["current"] += 1
 
-        await send_question(query, user_id, context)
-        app = Application.builder().token(BOT_TOKEN).build()
+        await send_question(query, user_id, context)app = Application.builder().token(BOT_TOKEN).build()
 
 app.add_handler(CommandHandler("start", start))
 app.add_handler(CommandHandler("help", help_command))
